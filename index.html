@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- mantem a tela proporcional em acesso mobile-->
+    <title>Consulta FIPE</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+
+    <main class="w-full max-w-md bg-white rounded-xl shadow p-6 space-y-4">
+        <h1 class="text-xl font-semibold text-gray-800">Consulta FIPE</h1>
+
+        <!-- box marca -->
+        <!-- o label for conecta com o select id, considerando o mesmo elemento
+         ao clicar na palavra “Marca”, o navegador foca o select automaticamente-->
+        <div>
+            <label for="marca" class="block text-sm text-gray-600 mb-1">Marca</label>
+            <select id="marca"
+                class="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:text-gray-400">
+                <option value="">Selecione a marca</option>
+            </select>
+        </div>
+
+        <!-- box modelo -->
+        <div>
+            <label for="modelo" class="block text-sm text-gray-600 mb-1">Modelo</label>
+            <select id="modelo" disabled
+                class="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:text-gray-400">
+                <option value="">Selecione o modelo</option>
+            </select>
+        </div>
+
+        <!-- box ano -->
+        <div>
+            <label for="ano" class="block text-sm text-gray-600 mb-1">Ano</label>
+            <select id="ano" disabled
+                class="w-full border border-gray-300 rounded-lg p-2 disabled:bg-gray-100 disabled:text-gray-400">
+                <option value="">Selecione o ano</option>
+            </select>
+        </div>
+
+        <!-- botão -->
+        <button id="consultar" disabled
+            class="w-full bg-blue-600 text-white rounded-lg p-2 font-medium hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed">
+            Consultar
+        </button>
+
+        <!-- indicador de carregamento: circulo girando + texto da etapa atual -->
+        <div id="carregando" class="hidden flex items-center gap-2 text-sm text-gray-500">
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-blue-600"></span>
+            <span id="carregando-texto">Carregando...</span>
+        </div>
+
+        <!-- mensagem de erro -->
+        <p id="erro" class="hidden text-sm text-red-600"></p>
+
+        <!-- exibicao do resultado -->
+        <section id="resultado" class="hidden border-t pt-4 space-y-2">
+            <p class="text-2xl font-semibold text-gray-900" id="res-valor"></p>
+            <dl class="text-sm text-gray-600 space-y-1">
+                <div class="flex justify-between">
+                    <dt>Código FIPE</dt>
+                    <dd id="res-codigo" class="font-medium text-gray-800"></dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt>Combustível</dt>
+                    <dd id="res-combustivel" class="font-medium text-gray-800"></dd>
+                </div>
+                <div class="flex justify-between">
+                    <dt>Mês de referência</dt>
+                    <dd id="res-mes" class="font-medium text-gray-800"></dd>
+                </div>
+            </dl>
+        </section>
+    </main>
+
+
+
+    <!-- ----------------------SCRIPT ------------------------------ -->
+
+    <script>
+
+        //______________ CONFIGURACAO E ELEMENTOS DA PAGINA
+
+        const API = "https://fipe.parallelum.com.br/api/v2";
+        //versao 2 da API: dominio novo e rotas em ingles (cars/brands/models/years)
+
+        //getElementById = os ids criados no HTML puxam o elemento e guardam numa variavel
+        const selectMarca = document.getElementById("marca");
+        const selectModelo = document.getElementById("modelo");
+        const selectAno = document.getElementById("ano");
+        //guarda os selects de marca, modelo e ano em variaveis
+
+        const botao = document.getElementById("consultar");
+        const erro = document.getElementById("erro");
+
+        const carregando = document.getElementById("carregando");
+        const carregandoTexto = document.getElementById("carregando-texto");
+        //indicador de requisicao em andamento (circulo girando + texto)
+
+        const areaResultado = document.getElementById("resultado");
+        const resValor = document.getElementById("res-valor");
+        const resCodigo = document.getElementById("res-codigo");
+        const resCombustivel = document.getElementById("res-combustivel");
+        const resMes = document.getElementById("res-mes");
+
+
+        //______________ FUNCOES AUXILIARES
+
+        function mostrarErro(mensagem) {
+            erro.textContent = mensagem;
+            erro.classList.remove("hidden");
+        }
+        //funcao para escrever o texto no parágrafo de erro (e remover a classe hidden do Tailwind, tornando o erro visivel)
+
+        function esconderErro() {
+            erro.classList.add("hidden");
+        }
+        //devolve a classe hidden e some com a mensagem, 
+        // quando o usuário troca a marca, para não ficar erro antigo na tela.
+
+        function resetarSelect(select, textoPadrao) {
+            select.innerHTML = `<option value="">${textoPadrao}</option>`;
+            select.disabled = true;
+        }
+        //LIMPA O SELECT E DESABILITA O CAMPO, "TRAVANDO" NOVAMENTE
+
+        function limparResultado() {
+            areaResultado.classList.add("hidden");
+            botao.disabled = true;
+        }
+        //esconde o resultado anterior e trava o botao
+
+        function mostrarCarregando(texto) {
+            carregandoTexto.textContent = texto;
+            carregando.classList.remove("hidden");
+        }
+        //escreve o texto da etapa atual e torna o indicador visivel
+
+        function esconderCarregando() {
+            carregando.classList.add("hidden");
+        }
+        //esconde o indicador quando a requisicao termina
+
+
+        //______________ SELECAO DE MARCAS 
+
+        async function carregarMarcas() {
+            mostrarCarregando("Carregando marcas...");
+            try {
+                const resposta = await fetch(`${API}/cars/brands`);
+                if (!resposta.ok) throw new Error("Falha ao buscar marcas");
+                //funcao assincrona que espera (await) a resposta da API para continuar e exibe erro caso nao acesse
+
+                const marcas = await resposta.json();
+                // converte a resposta em JSON para uma lista de objetos js
+
+                marcas.forEach(marca => {
+                    const option = document.createElement("option");
+                    option.value = marca.code;
+                    option.textContent = marca.name;
+                    selectMarca.appendChild(option);
+                    // para cada marca da lista, recebe o código, nome e coloca a opção no select
+                    // na v2 os campos se chamam code e name
+
+                });
+            } catch (e) {
+                mostrarErro("Não foi possível carregar as marcas. Tente novamente.");
+                //retorna mensagem de erro para qualquer coisa que de errado dentro do try
+            } finally {
+                esconderCarregando();
+                //finally roda sempre (com sucesso ou erro), entao o indicador nunca fica preso na tela
+            }
+        }
+
+        //limpa mensagens antigas, esvazia e trava modelo e ano (some com selecoes anteriores)
+        selectMarca.addEventListener("change", () => {
+            esconderErro();
+            limparResultado();
+            resetarSelect(selectModelo, "Selecione o modelo");
+            resetarSelect(selectAno, "Selecione o ano");
+
+            // só busca modelos se uma marca válida for escolhida
+            if (selectMarca.value) {
+                carregarModelos(selectMarca.value);
+            }
+        });
+
+
+        //_______________________ SELECAO DE MODELOS
+
+        async function carregarModelos(codigoMarca) {
+            mostrarCarregando("Carregando modelos...");
+            try {
+                const resposta = await fetch(`${API}/cars/brands/${codigoMarca}/models`);
+                if (!resposta.ok) throw new Error("Falha ao buscar modelos");
+                // monta a url inserindo o codigo da marca escolhida, mostrando erro caso nao encontre
+
+                const modelos = await resposta.json();
+                // na v2 a resposta e uma lista direta (nao existe mais dados.modelos)
+
+                modelos.forEach(modelo => {
+                    const option = document.createElement("option");
+                    option.value = modelo.code;
+                    option.textContent = modelo.name;
+                    selectModelo.appendChild(option);
+                });
+
+                selectModelo.disabled = false;
+            } catch (e) {
+                mostrarErro("Não foi possível carregar os modelos. Tente novamente.");
+            } finally {
+                esconderCarregando();
+            }
+        }
+
+        //reage a escolha do modelo limpando mensagens antigas/esvazia e trava o ano
+        selectModelo.addEventListener("change", () => {
+            esconderErro();
+            limparResultado();
+            resetarSelect(selectAno, "Selecione o ano");
+
+            //se o modelo for valido, carrega os anos considerando marca e modelo
+            if (selectModelo.value) {
+                carregarAnos(selectMarca.value, selectModelo.value);
+            }
+        });
+
+
+        //____________________________SELECAO DO ANO
+
+        async function carregarAnos(codigoMarca, codigoModelo) {
+            mostrarCarregando("Carregando anos...");
+            try {
+                const resposta = await fetch(
+                    `${API}/cars/brands/${codigoMarca}/models/${codigoModelo}/years`
+                );
+                if (!resposta.ok) throw new Error("Falha ao buscar anos");
+                //monta a URL com o codigo de marca e modelo
+
+                const anos = await resposta.json();
+
+                anos.forEach(ano => {
+                    const option = document.createElement("option");
+                    option.value = ano.code;
+                    option.textContent = ano.name;
+                    selectAno.appendChild(option);
+                });
+
+                selectAno.disabled = false; //libera o select depois de preenchido
+            } catch (e) {
+                mostrarErro("Não foi possível carregar os anos. Tente novamente.");
+            } finally {
+                esconderCarregando();
+            }
+        }
+
+        //ao escolher o ano, esconde erros e resultado antigos e libera o botao
+        selectAno.addEventListener("change", () => {
+            esconderErro();
+            areaResultado.classList.add("hidden");
+            botao.disabled = !selectAno.value;
+        });
+
+
+        //____________________SCRIPT RESULTADO 
+
+        async function consultarValor() {
+            mostrarCarregando("Consultando valor...");
+            try {
+                const resposta = await fetch(
+                    `${API}/cars/brands/${selectMarca.value}/models/${selectModelo.value}/years/${selectAno.value}`
+                );
+                if (!resposta.ok) throw new Error("Falha ao consultar valor");
+                //monta a URL com marca, modelo e ano escolhidos (o ano usa o codigo completo, ex: 2020-1)
+
+                const dados = await resposta.json();
+
+                resValor.textContent = dados.price;
+                resCodigo.textContent = dados.codeFipe;
+                resCombustivel.textContent = dados.fuel;
+                resMes.textContent = dados.referenceMonth.trim();
+                //na v2 os campos vem em ingles: price, codeFipe, fuel, referenceMonth
+
+                areaResultado.classList.remove("hidden");
+            } catch (e) {
+                mostrarErro("Não foi possível consultar o valor. Tente novamente.");
+            } finally {
+                esconderCarregando();
+            }
+        }
+
+        botao.addEventListener("click", () => {
+            esconderErro();
+            consultarValor();
+        });
+
+
+        //____________________INICIO
+
+        carregarMarcas();
+        //carrega as marcas assim que a pagina abre
+
+    </script>
+</body>
+
+</html>
