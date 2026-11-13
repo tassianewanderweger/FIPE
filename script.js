@@ -41,7 +41,7 @@ function resetarSelect(select, textoPadrao) {
     select.innerHTML = `<option value="">${textoPadrao}</option>`;
     select.disabled = true;
 }
-//LIMPA O SELECT E DESABILITA O CAMPO, "TRAVANDO" NOVAMENTE
+//LIMPA O SELECT E DESABILITA O CAMPO "TRAVANDO" NOVAMENTE
 
 function limparResultado() {
     areaResultado.classList.add("hidden");
